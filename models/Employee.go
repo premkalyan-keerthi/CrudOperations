@@ -3,10 +3,10 @@ package models
 import "fmt"
 
 type Employee struct {
-	EmployeeID   int    `json:"id"`
-	EmployeeName string `json:"name"`
-	EmployeeAge  int    `json:"age"`
-	IsMarried    bool   `json:"isMarried"`
+	EmployeeID   int    `json:"id,omitempty" bson:"employeeID,omitempty"`
+	EmployeeName string `json:"name" bson:"name"`
+	EmployeeAge  int    `json:"age" bson:"age"`
+	IsMarried    bool   `json:"isMarried" bson:"isMarried"`
 }
 
 func (e *Employee) Age() (int, error) {

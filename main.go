@@ -1,82 +1,28 @@
 package main
 
 import (
-	"employeeeDirectory/models"
+	"employeeeDirectory/db"
 	"employeeeDirectory/repository"
-	"employeeeDirectory/service"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
-)
 
-// CRUD Operations
+	"github.com/gorilla/mux"
+)
 
 func main() {
 
-	repo := repository.NewEmployeeRepo()
+	db.Connect()
 
-	Execute(repo)
+	router := mux.NewRouter()
 
-}
+	rep := repository.NewEmployeeRepo()
 
-func Execute(repo service.EmployeeService) {
+	router.HandleFunc("/employees", rep.CreateEmployee).Methods(http.MethodPost)
+	router.HandleFunc("/employees/{id}", rep.GetEmployee).Methods(http.MethodGet)
 
-	http.HandleFunc("/employees/", func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/employees/{id}", rep.UpdateEmployee).Methods(http.MethodPut)
+	router.HandleFunc("/employees/{id}", rep.DeleteEmployee).Methods(http.MethodDelete)
 
-		switch r.Method {
-
-		//Create
-		case http.MethodPost:
-			{
-
-				repo.CreateEmployee(w, r)
-
-			}
-		//Read
-		case http.MethodGet:
-			{
-				path := r.URL.Query().Get("id")
-				id, error := strconv.Atoi(path)
-				fmt.Println(path)
-
-				if error != nil {
-					fmt.Println("Unable to convert to integer")
-				}
-				repo.GetEmployee(id)
-			}
-		//Update
-		case http.MethodPut:
-			{
-				var emp models.Employee
-				if err := json.NewDecoder(r.Body).Decode(&emp); err != nil {
-					fmt.Println("Wrong data is sent")
-				}
-				repo.UpdateEmployee(emp)
-
-			}
-		//Delete
-		case http.MethodDelete:
-			{
-				path := r.URL.Query().Get("id")
-				fmt.Println(path)
-				id, error := strconv.Atoi(path)
-
-				if error != nil {
-					fmt.Println("Unable to convert to integer")
-				}
-				repo.DeleteEmployee(id)
-			}
-		default:
-			{
-				http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-			}
-
-		}
-	})
-
+	http.ListenAndServe(":8080", router)
 	fmt.Println("Starting Server")
-
-	http.ListenAndServe(":8080", nil)
-
 }

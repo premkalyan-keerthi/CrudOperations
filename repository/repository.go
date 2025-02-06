@@ -1,12 +1,33 @@
 package repository
 
 import (
+	"context"
+	"employeeeDirectory/db"
 	"employeeeDirectory/models"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gorilla/mux"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
 )
+
+var employeeCollection *mongo.Collection
+
+var id int = 1000
+
+func InitEmplloyeeRepository(coll *mongo.Collection) {
+	employeeCollection = coll
+}
+
+func CreateEmployee(ctx context.Context, employee models.Employee) error {
+	_, err := employeeCollection.InsertOne(ctx, employee)
+
+	return err
+}
 
 type EmployeeRepo struct {
 	employees map[int]models.Employee
@@ -18,65 +39,129 @@ func NewEmployeeRepo() *EmployeeRepo {
 
 func (r *EmployeeRepo) CreateEmployee(w http.ResponseWriter, req *http.Request) {
 
-	var emp models.Employee
+	defer func() {
 
-	if err := json.NewDecoder(req.Body).Decode(&emp); err != nil {
-		http.Error(w, "Invalid Request body", http.StatusBadRequest)
-		return
+		if e := recover(); e != nil {
+			fmt.Println("I got a panick!!", e)
+		}
+	}()
+
+	w.Header().Set("Content-Type", "application/json")
+
+	var employee models.Employee
+
+	err := json.NewDecoder(req.Body).Decode(&employee)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
-	fmt.Println(emp)
+	employee.EmployeeID = id
 
-	if _, exists := r.employees[emp.ID()]; exists {
-		fmt.Println("Employee Already Exists")
-		http.Error(w, "Invalid Request body", http.StatusUnprocessableEntity)
-		return
+	id++
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.GetCollection("employeedirectory", "employees")
+	_, err = collection.InsertOne(ctx, employee)
+
+	if err != nil {
+		http.Error(w, "Failed to save to DB", http.StatusInternalServerError)
 	}
-
-	r.employees[emp.ID()] = emp
-
-	r.ListAllEmployees()
 
 	w.WriteHeader(http.StatusCreated)
 
 }
 
-func (r *EmployeeRepo) GetEmployee(id int) (models.Employee, error) {
+func (r *EmployeeRepo) GetEmployee(w http.ResponseWriter, req *http.Request) {
 
-	if val, exists := r.employees[id]; !exists {
-		fmt.Println("No Employee Found")
-		return models.Employee{}, errors.New("Invalid Employee ID")
-	} else {
-		r.ListAllEmployees()
-		return val, nil
+	w.Header().Set("Content-Type", "application/json")
+
+	params := mux.Vars(req)
+
+	id := params["id"]
+
+	var employee models.Employee
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.GetCollection("employeedirectory", "employees")
+	intval, _ := strconv.Atoi(id)
+	err := collection.FindOne(ctx, bson.M{"employeeID": intval}).Decode(&employee)
+
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(w, "Failed to save to DB", http.StatusInternalServerError)
+		return
 	}
+
+	json.NewEncoder(w).Encode(employee)
 
 }
 
-func (r *EmployeeRepo) UpdateEmployee(e models.Employee) error {
+func (r *EmployeeRepo) UpdateEmployee(w http.ResponseWriter, req *http.Request) {
 
-	if _, exists := r.employees[e.ID()]; !exists {
-		fmt.Println("No Employee Found to update")
-		return errors.New("Invalid Employee ID")
+	w.Header().Set("Content-Type", "application/json")
+
+	params := mux.Vars(req)
+
+	id := params["id"]
+
+	var employee models.Employee
+
+	err := json.NewDecoder(req.Body).Decode(&employee)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
-	r.employees[e.ID()] = e
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 
-	r.ListAllEmployees()
-	return nil
+	update := bson.M{"$set": employee}
+
+	collection := db.GetCollection("employeedirectory", "employees")
+
+	intval, _ := strconv.Atoi(id)
+
+	_, err = collection.UpdateOne(ctx, bson.M{"employeeID": intval}, update)
+
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(w, "Failed to save to DB", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+
 }
 
-func (r *EmployeeRepo) DeleteEmployee(id int) error {
+func (r *EmployeeRepo) DeleteEmployee(w http.ResponseWriter, req *http.Request) {
 
-	if _, exists := r.employees[id]; !exists {
-		fmt.Println("No Employee found to delete")
-		return errors.New("Not a new Employee")
+	w.Header().Set("Content-Type", "application/json")
+
+	params := mux.Vars(req)
+
+	id := params["id"]
+
+	var employee models.Employee
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	collection := db.GetCollection("employeedirectory", "employees")
+	intval, _ := strconv.Atoi(id)
+	_, err := collection.DeleteOne(ctx, bson.M{"employeeID": intval})
+
+	if err != nil {
+		fmt.Println(err.Error())
+		http.Error(w, "Failed to save to DB", http.StatusInternalServerError)
+		return
 	}
 
-	delete(r.employees, id)
-
-	r.ListAllEmployees()
-	return nil
+	json.NewEncoder(w).Encode(employee)
 }
 
 func (r *EmployeeRepo) ListAllEmployees() {
